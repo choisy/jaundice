@@ -1,0 +1,389 @@
+---
+title: "Phuong's study"
+csl: the-american-naturalist.csl
+output:
+  html_document:
+    theme: cerulean
+    toc: yes
+  pdf_document:
+    toc: yes
+<!-- bibliography: references.bib -->
+editor_options: 
+  chunk_output_type: console
+---
+
+<!--
+IMAGES:
+Insert them with: ![alt text](image.png)
+You can also resize them if needed: convert image.png -resize 50% image.png
+If you want to center the image, go through HTML code:
+<div style="text-align:center"><img src ="image.png"/></div>
+
+REFERENCES:
+For references: Put all the bibTeX references in the file "references.bib"
+in the current folder and cite the references as @key or [@key] in the text.
+Uncomment the bibliography field in the above header and put a "References"
+title wherever you want to display the reference list.
+-->
+
+<style type="text/css">
+.main-container {
+  max-width: 1370px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r general options, include = FALSE}
+knitr::knit_hooks$set(
+  margin = function(before, options, envir) {
+    if (before) par(mgp = c(1.5, .5, 0), bty = "n", plt = c(.105, .97, .13, .97))
+    else NULL
+  },
+  prompt = function(before, options, envir) {
+    options(prompt = if (options$engine %in% c("sh", "bash")) "$ " else "> ")
+  })
+
+knitr::opts_chunk$set(margin = TRUE, prompt = TRUE, comment = "",
+                      collapse = TRUE, cache = FALSE, autodep = TRUE,
+                      dev.args = list(pointsize = 11), fig.height = 3.5,
+                      fig.width = 4.24725, fig.retina = 2, fig.align = "center")
+
+options(width = 137)
+```
+
+## Data package
+
+Here you'll need a number of data that I have developped for vietnam. To
+install them, you need the package `remote` installed on your system:
+
+```{r eval = FALSE}
+install.packages("remote")
+```
+
+Then install the following packages:
+
+```{r eval = FALSE}
+remotes::install_github("epix-project/gdpm")
+remotes::install_github("epix-project/gadmVN")
+remotes::install_github("epix-project/gso")
+```
+
+## Surveillance data
+
+Surveillance data from [GDPM](http://vncdc.gov.vn/en) are in the following
+package:
+
+```{r}
+library(gdpm)
+```
+
+To see the list of diseases that are available in the package:
+
+```{r}
+diseases
+```
+
+If you want hepatitis:
+
+```{r}
+hepatitis <- getid(hepatitis)
+```
+
+which gives:
+
+```{r}
+head(hepatitis)
+```
+
+You can see the time range:
+
+```{r}
+range(hepatitis$year)
+```
+
+You can also see the number of provinces:
+
+```{r}
+length(unique(hepatitis$province))
+```
+
+39 is the number of provinces that existed in Vietnam in 1980. These provinces
+have split since then to reach a number of 63 in 2008. For consistency, we
+always use the provinces' definition of the earlier time in the data. For
+example, if you are interested in the hepatitis data since 2008 instead of 1980:
+
+```{r}
+hepatitis2 <- getid(hepatitis, from = 2008)
+```
+
+You can see that, for this time range:
+
+```{r}
+range(hepatitis2$year)
+```
+
+you know have the 63 provinces that you could expect:
+
+```{r}
+length(unique(hepatitis2$province))
+```
+
+## Maps of Vietnamese provinces
+
+For handling maps in R, you need the following package:
+
+```{r}
+library(sf)
+```
+
+Maps for Vietnam from [GADM](https://gadm.org) are in the following package:
+
+```{r}
+library(gadmVN)
+```
+
+The retrieval of maps here follows the same principle as for the surveillance
+data: depending on the date you want, you'll get different maps. For example, if
+you want the map of the provinces of Vietnam in 1980:
+
+```{r}
+vietnam1980 <- gadm(1980, "provinces")
+```
+
+which gives:
+
+```{r}
+vietnam1980
+```
+
+which is basically a data frame here with one column containing the provinces'
+name and another containing the coordinates of the polygons. You can see by the
+way that there are 40 provinces. You can plot it:
+
+```{r}
+plot(st_geometry(vietnam1980))
+```
+
+If, on the contrary, you are intereste in the map of the provinces as they are
+today, just use the default values:
+
+```{r}
+vietnam <- gadm()
+```
+
+which gives 63 polygons:
+
+```{r}
+vietnam
+```
+
+Note that, compared to the `vietnam1980` data frame, we have here additional
+information. As before, we can plot the polygons of the data:
+
+```{r}
+plot(st_geometry(vietnam))
+```
+
+## Mapping a variable
+
+Let's say now that you want to map the incidence in January 2008. First, you
+need to retrieve these values. For that, let's use this package:
+
+```{r}
+library(dplyr)
+```
+
+And then:
+
+```{r}
+hep <- hepatitis2 %>% 
+  filter(month == "January", year == 2008) %>% 
+  select(province, incidence_hepatitis)
+```
+
+which gives:
+
+```{r}
+hep
+```
+
+Next step, you'll merge this `hep` data frame with the `vietnam` data you got
+above, using the `province` variable as the common key between the 2 data frames:
+
+```{r}
+hep_map <- left_join(vietnam, hep, by = "province")
+```
+
+You can see that the `incidence_hepatitis` variable of the `hep` data frame has
+been added to the `vietnam` data frame:
+
+```{r}
+hep_map
+```
+
+If you want to map the incidence values, simply do
+
+```{r}
+plot(hep_map["incidence_hepatitis"])
+```
+
+You can twickle the look of the map. I let you look at the help of the function
+for that or, even better, at the vignettes of the `sf` package. You can also
+aggregate the data of several provinces or plot by region (you'll see that the
+regions information in available in the `vietnam` data frame). Let me know if
+there are things that you have difficulties doing.
+
+## Population data
+
+In addition to the `dplyr` package, here we'll need the `purrr` package:
+
+```{r}
+library(purrr)
+```
+
+Socio-demo-economic data from [GSO](https://www.gso.gov.vn/Default.aspx?tabid=217)
+are available in the following package:
+
+```{r}
+library(gso)
+```
+
+There is a huge amount of data in this package and it may not be super easy to
+find what you are looking for. To make it easier, load the `content` data frame:
+
+```{r}
+data(content)
+```
+
+`content` is a big data frame of the metadata of the data:
+
+```{r}
+content
+```
+
+You can see in particular that data sets are organised by category, which makes
+the search a bit easier. You can list the different categories as so:
+
+```{r}
+unique(content$category)
+```
+
+If you are interested in population sizes, it's likely that what you are looking
+for is in the `Population and Employment` category. You can also filter by
+subcategory and spatial resolution
+
+```{r}
+content %>% 
+  filter(category == "Population and Employment", subcategory == "Demography", sp_resolution == "province")
+```
+
+It seems that the first or the third data sets could be useful for you, i.e.
+`demography_1` and `demography_5` here. To retrieve the data sets:
+
+```{r}
+demo1 <- content %>% 
+  filter(data_name == "demography_1") %>% 
+  pluck("data") %>% 
+  first() %>% 
+  transmute(year     = year,
+            province = province,
+            popsize  = 1000 * average_population_thous_pers)
+```
+
+which gives:
+
+```{r}
+head(demo1)
+```
+
+and
+
+```{r}
+demo5 <- content %>% 
+  filter(data_name == "demography_5") %>% 
+  pluck("data") %>% 
+  first() %>% 
+  transmute(year     = year,
+            province = province,
+            popsize  = 1000 * total)
+```
+
+which gives:
+
+```{r}
+head(demo5)
+```
+
+Note that the time range of the 2 data sets are not the same:
+
+```{r}
+range(demo1$year)
+```
+
+and
+
+```{r}
+range(demo5$year)
+```
+
+If you are interested in the population sizes in 2011:
+
+```{r}
+demo1_2011 <- demo1 %>%
+  filter(year == 2011) %>% 
+  select(-year) %>% 
+  arrange(province)
+```
+
+and
+
+```{r}
+demo5_2011 <- demo5 %>%
+  filter(year == 2011) %>% 
+  select(-year) %>% 
+  na.exclude() %>% # removing Ha Tay
+  arrange(province)
+```
+
+You can verify that the 2 data sets are actually identical:
+
+```{r}
+all(unlist(map2(demo1_2011, demo5_2011, identical)))
+```
+
+You can also check the total population size:
+
+```{r}
+sum(demo1_2011$popsize)
+```
+
+Same as before, the province names in the `gso` package are compatible with
+those in the `gdpm` and the `gadmVN` packages, which makes it easy for you to
+map the data:
+
+```{r}
+pop_map <- left_join(vietnam, demo1_2011, by = "province")
+```
+
+and:
+
+```{r}
+plot(pop_map["popsize"])
+```
+
+or to calculate incidence rates, per 100,000 for example:
+
+```{r}
+incidence_rate_map <- vietnam %>% 
+  left_join(hep, by = "province") %>% 
+  left_join(demo1_2011, by = "province") %>% 
+  mutate(incidence_rate = 1e5 * incidence_hepatitis / popsize)
+```
+
+and plot it:
+
+```{r}
+plot(incidence_rate_map["incidence_rate"])
+```
+
